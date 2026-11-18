@@ -11,6 +11,8 @@ todo/
 ├── install.sh             # scripts/ を ~/.local/bin にリンク
 ├── scripts/
 │   ├── todo-view          # active.md の色付きビューア
+│   ├── todo-notes         # notes を id の数字順に選んで leaf で開く
+│   ├── todo-next-id       # 次に振る id を表示
 │   └── todo-view.toml     # status / 象限 / 期限の色設定
 ├── data/                  # 実データ。このリポジトリでは管理しない（手元専用の別 git リポジトリ）
 │   ├── active.md          # 未完了の TODO（4 象限のテーブル）
@@ -26,6 +28,7 @@ todo/
 前提:
 
 - `~/.local/bin` に PATH が通っている
+- `todo-notes` を使うなら fzf と leaf が入っている
 - [uv](https://docs.astral.sh/uv/) が入っている。`todo-view` が必要とする次のものは、初回実行時に uv が用意する
   - Python 3.11 以上
   - rich 13 以上
@@ -59,6 +62,17 @@ todo-view --once            # 1 回だけ描画して終了
 - `Ctrl-E` で `$VISUAL` / `$EDITOR` を開いて active.md を編集（herdr 上では編集中だけペインを最大化）
 - active.md・notes/・`todo-view.toml` の変更を検知して自動で再描画する
 - 色や status の種類は `scripts/todo-view.toml` で変えられる（書き方はファイル内のコメントを参照）
+
+### notes のピッカー
+
+```sh
+todo-notes                # data/notes を id の数字順に並べて選ぶ
+todo-notes demo/notes     # 別の notes ディレクトリ
+```
+
+- 文字を打つと id でもタイトルでも絞り込める（`18` と打てば #18 が先頭に来る）。Enter で開く、Ctrl-R で再読み込み、Ctrl-P でプレビューの切替、Esc で終了
+- 選んだ note は `leaf --watch` で開き、`q` で閉じると一覧に戻る。herdr 上ではマウスキャプチャを自動で切る
+- fzf と leaf が必要
 
 ### エージェント
 

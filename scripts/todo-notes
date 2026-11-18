@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# notes を id の数字順（1, 2, …, 10, 18）に並べて選び、leaf で開く。leaf を閉じると一覧に戻る。
+#
+#   todo-notes              このリポジトリの data/notes
+#   todo-notes <notes_dir>  別の notes ディレクトリ（demo/notes など）
+#
+# 一覧（fzf）: 文字を打つと絞り込み（id でもタイトルでも）、Enter で開く、Ctrl-R で再読み込み、
+#              Ctrl-P でプレビューの表示切替、Esc / Ctrl-C で終了。
+# 開いた note は leaf --watch で表示する（q で一覧に戻る）。herdr 上ではマウスキャプチャを切る
+# （端末側でテキストを選択できるように）。
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+# fzf の reload から呼ばれる: 一覧を「ファイル名<TAB>表示」で数字順に出す
+if [[ "${1:-}" == "--list" ]]; then
+  dir="$2"
+  find "$dir" -maxdepth 1 -name '*.md' -printf '%f\n' | sort -V | while IFS= read -r f; do
+    id="${f%%-*}"
+    # 表示は 1 行目の見出し（「# 18 タイトル」「# 18. タイトル」）から id を除いたもの。無ければ slug
+    title="$(sed -n '1{s/^#[[:space:]]*//;s/^[0-9][0-9]*\.\{0,1\}[[:space:]]*//;p;q}' "$dir/$f")"
+    [[ -n "$title" ]] || { title="${f#*-}"; title="${title%.md}"; }
+    printf '%s\t%4s  %s\n' "$f" "$id" "$title"
+  done
+  exit 0
+fi
+
+DIR="$(cd "${1:-$REPO/data/notes}" && pwd)"
+for c in fzf leaf; do
+  command -v "$c" >/dev/null || { echo "error: $c が見つかりません" >&2; exit 1; }
+done
+
+self="$(readlink -f "${BASH_SOURCE[0]}")"
+list_cmd="$(printf '%q --list %q' "$self" "$DIR")"
+
+while true; do
+  # --tiebreak=index: 空のクエリでは数字順のまま、絞り込み時も同点なら数字順
+  sel="$(eval "$list_cmd" | fzf \
+    --delimiter=$'\t' --with-nth=2 --tiebreak=index \
+    --layout=reverse --prompt='notes> ' \
+    --header='Enter: 開く  Ctrl-R: 再読込  Ctrl-P: プレビュー  Esc: 終了' \
+    --preview "leaf --inline ansi:\$FZF_PREVIEW_COLUMNS $(printf '%q' "$DIR")/{1}" \
+    --preview-window='right,50%,<90(hidden)' \
+    --bind "ctrl-r:reload($list_cmd)" --bind 'ctrl-p:toggle-preview')" || exit 0
+  f="${sel%%$'\t'*}"
+  [[ -n "$f" ]] || continue
+
+  # herdr 上なら、leaf の画面にファイル名が出たら Shift+M を送ってマウスキャプチャを切る
+  if [[ -n "${HERDR_PANE_ID:-}" ]] && command -v herdr >/dev/null; then
+    ( herdr pane wait-output "$HERDR_PANE_ID" --match "$f" --timeout 5000 >/dev/null 2>&1 &&
+        herdr pane send-text "$HERDR_PANE_ID" "M" >/dev/null 2>&1 ) &
+  fi
+  leaf --watch "$DIR/$f" || true
+done
