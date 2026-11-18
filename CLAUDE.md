@@ -12,7 +12,7 @@ TODO を手元の Markdown で持ち、Claude Code に操作させるための�
 - `data/active.md` — 未完了の TODO 一覧（アイゼンハワー・マトリクスの 4 象限）
 - `data/notes/<id>-<slug>.md` — 詳細・作業記録が必要な TODO のメモ。完了しても移動・削除しない
 - `data/archive.md` — 完了した TODO の記録（追記のみ）
-- `demo/` — 表示確認用のダミーデータ（`todo-view demo/active.md` で見られる）。実データではない
+- `demo/` — 表示確認用のダミーデータ（`scripts/todo-view demo/active.md` で見られる）。実データではない
 - `data.template/` — 空の `data/` の雛形。`install.sh` が `data/` が無いときにこれをコピーする
 
 `data/` は todo リポジトリでは git 管理しない（`.gitignore` 済み）。`data/` の中だけが、手元専用の独立した git リポジトリになっている。

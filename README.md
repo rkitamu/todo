@@ -8,7 +8,7 @@ TODO を Markdown で管理し、Claude Code に操作させるための仕組�
 todo/
 ├── CLAUDE.md              # リポジトリの思想とデータのルール
 ├── .claude/agents/todo.md # TODO 管理エージェントの役割（claude --agent todo）
-├── install.sh             # scripts/ を ~/.local/bin にリンク
+├── install.sh             # data/ の用意と uv の確認
 ├── scripts/
 │   ├── todo-view          # active.md の色付きビューア
 │   ├── todo-notes         # notes を id の数字順に選んで leaf で開く
@@ -20,7 +20,7 @@ todo/
 │   ├── archive.md         # 完了した TODO
 │   └── notes/             # TODO ごとの詳細メモ（NN-slug.md）
 ├── data.template/         # data/ の空の雛形（install.sh が data/ を作るときに使う）
-├── demo/                  # 表示確認用のダミーデータ（todo-view demo/active.md）
+├── demo/                  # 表示確認用のダミーデータ（scripts/todo-view demo/active.md）
 └── LICENSE                # MIT
 ```
 
@@ -28,7 +28,6 @@ todo/
 
 前提:
 
-- `~/.local/bin` に PATH が通っている
 - `todo-notes` を使うなら fzf と leaf が入っている
 - [uv](https://docs.astral.sh/uv/) が入っている。`todo-view` が必要とする次のものは、初回実行時に uv が用意する
   - Python 3.11 以上
@@ -40,22 +39,19 @@ cd todo
 ./install.sh
 ```
 
-`scripts/` 内の実行可能ファイルごとに `~/.local/bin/<name>` へシンボリックリンクを張る。
-
-- 再実行してもよい（リンクを張り直すだけ）
-- リンクではない同名ファイルが既にあれば、上書きせずにエラーで止まる
 - `data/` が無ければ `data.template/` から作り、手元専用の git リポジトリとして初期コミットする（既にあれば触らない）。別のマシンにデータを移すときは `data/` ごとコピーする
-- 取り外すときは `./install.sh --uninstall`（このリポジトリを指すリンクだけ消す）
-- リンク先を変えたいときは `INSTALL_BIN_DIR=/path ./install.sh`
+- uv が見つからなければ警告する
+- 再実行してもよい
+- `scripts/` のコマンドは PATH に置かない。複数の環境に clone しても混ざらないよう、リポジトリのディレクトリから `scripts/todo-view` のような相対パスで実行する
 
 ## 使い方
 
 ### ビューア
 
 ```sh
-todo-view                   # data/active.md を監視して表示
-todo-view path/to/active.md # 別のファイルを表示
-todo-view --once            # 1 回だけ描画して終了
+scripts/todo-view                   # data/active.md を監視して表示
+scripts/todo-view path/to/active.md # 別のファイルを表示
+scripts/todo-view --once            # 1 回だけ描画して終了
 ```
 
 - `q` / `Ctrl-C` で終了、`r` で再描画
@@ -67,8 +63,8 @@ todo-view --once            # 1 回だけ描画して終了
 ### notes のピッカー
 
 ```sh
-todo-notes                # data/notes を id の数字順に並べて選ぶ
-todo-notes demo/notes     # 別の notes ディレクトリ
+scripts/todo-notes                # data/notes を id の数字順に並べて選ぶ
+scripts/todo-notes demo/notes     # 別の notes ディレクトリ
 ```
 
 - 文字を打つと id でもタイトルでも絞り込める（`18` と打てば #18 が先頭に来る）。Enter で開く、Ctrl-R で再読み込み、Ctrl-P でプレビューの切替、Esc で終了
@@ -83,4 +79,4 @@ claude --agent todo   # リポジトリのディレクトリで起動する
 
 役割は `.claude/agents/todo.md`、データのルールは `CLAUDE.md` にある。TODO を追加・更新・アーカイブする。「30 をやりたい」のように id で指示できる。
 
-新しい TODO の id は `todo-next-id` が払い出す（エージェントが TODO を足すときに使う）。
+新しい TODO の id は `scripts/todo-next-id` が払い出す（エージェントが TODO を足すときに使う）。
