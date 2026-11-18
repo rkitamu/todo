@@ -36,6 +36,8 @@ from rich.text import Text
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 CONFIG_PATH = SCRIPT_DIR / "todo-view.toml"
+# 手元だけの上書き（git 管理しない）。CONFIG_PATH の上に重ねる
+LOCAL_CONFIG_PATH = SCRIPT_DIR / "todo-view.local.toml"
 
 DEFAULT_CONFIG = {
     "status": {"none": "dim", "wip": "bold blue", "pending": "bold yellow"},
@@ -59,9 +61,12 @@ class Section:
 
 
 def load_config() -> dict:
+    """既定値 → todo-view.toml → todo-view.local.toml の順に重ねる（後のものが優先）。"""
     cfg = {k: (v.copy() if isinstance(v, dict) else v) for k, v in DEFAULT_CONFIG.items()}
-    if CONFIG_PATH.exists():
-        user = tomllib.loads(CONFIG_PATH.read_text())
+    for path in (CONFIG_PATH, LOCAL_CONFIG_PATH):
+        if not path.exists():
+            continue
+        user = tomllib.loads(path.read_text())
         for k, v in user.items():
             if isinstance(v, dict) and isinstance(cfg.get(k), dict):
                 cfg[k].update(v)
@@ -261,7 +266,7 @@ def split_keys(data: bytes) -> list[bytes]:
 
 def stamp(p: Path, cfg_p: Path):
     vals = []
-    for x in (p, cfg_p, p.parent / "notes"):
+    for x in (p, cfg_p, LOCAL_CONFIG_PATH, p.parent / "notes"):
         try:
             vals.append(x.stat().st_mtime_ns)
         except FileNotFoundError:

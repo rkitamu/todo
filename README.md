@@ -11,7 +11,8 @@ todo/
 ├── install.sh             # scripts/ を ~/.local/bin にリンク
 ├── scripts/
 │   ├── todo-view          # active.md の色付きビューア
-│   └── todo-view.toml     # status / 象限 / 期限の色設定
+│   ├── todo-view.toml     # status / 象限 / 期限の色設定（既定値）
+│   └── todo-view.local.toml # 手元だけの上書き（任意。git 管理しない）
 ├── data/                  # 実データ。このリポジトリでは管理しない（手元専用の別 git リポジトリ）
 │   ├── active.md          # 未完了の TODO（4 象限のテーブル）
 │   ├── archive.md         # 完了した TODO
@@ -58,7 +59,7 @@ todo-view --once            # 1 回だけ描画して終了
 - 画面に収まらないときはスクロールできる: `j`/`k`・`↑`/`↓`（1 行）、`Space`/`b`・`PgDn`/`PgUp`（1 画面）、`g`/`G`（先頭/末尾）。端末が対応していればマウスホイールも効く
 - `Ctrl-E` で `$VISUAL` / `$EDITOR` を開いて active.md を編集（herdr 上では編集中だけペインを最大化）
 - active.md・notes/・`todo-view.toml` の変更を検知して自動で再描画する
-- 色や status の種類は `scripts/todo-view.toml` で変えられる（書き方はファイル内のコメントを参照）
+- 色や status の種類は `scripts/todo-view.toml` で変えられる（書き方はファイル内のコメントを参照）。手元だけ変えたいときは、変えたい値だけを `scripts/todo-view.local.toml`（git 管理しない）に書くと上に重なる
 
 ### エージェント
 
