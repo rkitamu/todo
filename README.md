@@ -17,7 +17,8 @@ todo/
 │   ├── archive.md         # 完了した TODO
 │   └── notes/             # TODO ごとの詳細メモ（NN-slug.md）
 ├── data.template/         # data/ の空の雛形（install.sh が data/ を作るときに使う）
-└── demo/                  # レイアウト確認用のダミーデータ
+├── demo/                  # 表示確認用のダミーデータ（todo-view demo/active.md）
+└── LICENSE                # MIT
 ```
 
 ## セットアップ
