@@ -1,0 +1,70 @@
+# todo
+
+TODO を Markdown で管理し、Claude Code に操作させるための仕組み。データ（`data/`）はこのリポジトリに含めない。
+
+## 構成
+
+```
+todo/
+├── CLAUDE.md              # リポジトリの思想とデータのルール
+├── .claude/agents/todo.md # TODO 管理エージェントの役割（claude --agent todo）
+├── install.sh             # scripts/ を ~/.local/bin にリンク
+├── scripts/
+│   ├── todo-view          # active.md の色付きビューア
+│   └── todo-view.toml     # status / 象限 / 期限の色設定
+├── data/                  # 実データ。このリポジトリでは管理しない（手元専用の別 git リポジトリ）
+│   ├── active.md          # 未完了の TODO（4 象限のテーブル）
+│   ├── archive.md         # 完了した TODO
+│   └── notes/             # TODO ごとの詳細メモ（NN-slug.md）
+├── data.template/         # data/ の空の雛形（install.sh が data/ を作るときに使う）
+└── demo/                  # レイアウト確認用のダミーデータ
+```
+
+## セットアップ
+
+前提:
+
+- `~/.local/bin` に PATH が通っている
+- [uv](https://docs.astral.sh/uv/) が入っている。`todo-view` が必要とする次のものは、初回実行時に uv が用意する
+  - Python 3.11 以上
+  - rich 13 以上
+
+```sh
+git clone <this repo> todo
+cd todo
+./install.sh
+```
+
+`scripts/` 内の実行可能ファイルごとに `~/.local/bin/<name>` へシンボリックリンクを張る。
+
+- 再実行してもよい（リンクを張り直すだけ）
+- リンクではない同名ファイルが既にあれば、上書きせずにエラーで止まる
+- `data/` が無ければ `data.template/` から作り、手元専用の git リポジトリとして初期コミットする（既にあれば触らない）。別のマシンにデータを移すときは `data/` ごとコピーする
+- 取り外すときは `./install.sh --uninstall`（このリポジトリを指すリンクだけ消す）
+- リンク先を変えたいときは `INSTALL_BIN_DIR=/path ./install.sh`
+
+## 使い方
+
+### ビューア
+
+```sh
+todo-view                   # data/active.md を監視して表示
+todo-view path/to/active.md # 別のファイルを表示
+todo-view --once            # 1 回だけ描画して終了
+```
+
+- `q` / `Ctrl-C` で終了、`r` で再描画
+- 画面に収まらないときはスクロールできる: `j`/`k`・`↑`/`↓`（1 行）、`Space`/`b`・`PgDn`/`PgUp`（1 画面）、`g`/`G`（先頭/末尾）。端末が対応していればマウスホイールも効く
+- `Ctrl-E` で `$VISUAL` / `$EDITOR` を開いて active.md を編集（herdr 上では編集中だけペインを最大化）
+- active.md・notes/・`todo-view.toml` の変更を検知して自動で再描画する
+- 色や status の種類は `scripts/todo-view.toml` で変えられる（書き方はファイル内のコメントを参照）
+
+### エージェント
+
+```sh
+claude --agent todo   # リポジトリのディレクトリで起動する
+```
+
+役割は `.claude/agents/todo.md`、データのルールは `CLAUDE.md` にある。TODO を追加・更新・アーカイブする。「30 をやりたい」のように id で指示できる。
+
+新しい TODO の id は `todo-next-id` が払い出す（エージェントが TODO を足すときに使う）。

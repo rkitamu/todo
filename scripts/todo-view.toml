@@ -1,0 +1,27 @@
+# todo-view の表示設定。保存すると表示中のビューアに即反映される。
+# スタイルは rich の書式: "bold", "dim", "white on blue", "#ff8800" など。
+
+# status に無い値のスタイル（書き間違いの検知用）
+unknown_status = "bold magenta"
+
+# テーブル罫線の色
+border = "bright_black"
+
+# status 列の値 → スタイル。ここに無い値は unknown_status で表示される。
+# status の種類を増やすときは、ここに `値 = "スタイル"` を 1 行足す（凡例にも自動で出る）。
+[status]
+none    = "dim"
+wip     = "bold blue"
+pending = "bold yellow"
+
+# 見出し（全角/半角括弧より前の部分）→ スタイル
+[quadrant]
+Necessary   = "bold red"
+Effective   = "bold green"
+Distraction = "bold yellow"
+Waste       = "bold white"
+
+[due]
+overdue   = "bold red"   # 期限切れ・今日
+soon      = "yellow"     # soon_days 日以内
+soon_days = 3

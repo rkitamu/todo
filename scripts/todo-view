@@ -1,0 +1,373 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["rich>=13"]
+# ///
+"""active.md を象限ごとの色付きテーブルで表示する。ファイル変更で自動再描画。
+
+usage: todo-view [path/to/active.md] [--once]
+  q / Ctrl-C で終了。r で手動再描画。Ctrl-E で $EDITOR を開いて active.md を編集。
+  スクロール: j/k・↑↓（1 行）、Space/b・PgDn/PgUp（1 画面）、g/G・Home/End（先頭/末尾）。
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import select
+import shlex
+import shutil
+import subprocess
+import sys
+import termios
+import time
+import tomllib
+import tty
+from dataclasses import dataclass, field
+from datetime import date, datetime
+from pathlib import Path
+
+from rich import box
+from rich.console import Console, Group
+from rich.segment import Segment
+from rich.table import Table
+from rich.text import Text
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+CONFIG_PATH = SCRIPT_DIR / "todo-view.toml"
+
+DEFAULT_CONFIG = {
+    "status": {"none": "dim", "wip": "bold blue", "pending": "bold yellow"},
+    "unknown_status": "bold magenta",
+    "border": "bright_black",
+    "quadrant": {},
+    "due": {"overdue": "bold red", "soon": "yellow", "soon_days": 3},
+}
+
+
+@dataclass
+class Row:
+    cells: dict[str, str]
+
+
+@dataclass
+class Section:
+    title: str
+    headers: list[str] = field(default_factory=list)
+    rows: list[Row] = field(default_factory=list)
+
+
+def load_config() -> dict:
+    cfg = {k: (v.copy() if isinstance(v, dict) else v) for k, v in DEFAULT_CONFIG.items()}
+    if CONFIG_PATH.exists():
+        user = tomllib.loads(CONFIG_PATH.read_text())
+        for k, v in user.items():
+            if isinstance(v, dict) and isinstance(cfg.get(k), dict):
+                cfg[k].update(v)
+            else:
+                cfg[k] = v
+    return cfg
+
+
+def split_row(line: str) -> list[str]:
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
+def parse(md: str) -> list[Section]:
+    sections: list[Section] = []
+    cur: Section | None = None
+    for line in md.splitlines():
+        if line.startswith("## "):
+            cur = Section(line[3:].strip())
+            sections.append(cur)
+            continue
+        if cur is None or not line.lstrip().startswith("|"):
+            continue
+        cells = split_row(line)
+        if all(re.fullmatch(r":?-{2,}:?", c) for c in cells if c):
+            continue  # 区切り行
+        if not cur.headers:
+            cur.headers = [c.lower() for c in cells]
+            continue
+        cur.rows.append(Row(dict(zip(cur.headers, cells))))
+    return sections
+
+
+def parse_date(s: str) -> date | None:
+    s = s.strip()
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+    m = re.fullmatch(r"(\d{1,2})/(\d{1,2})", s)
+    if m:
+        try:
+            return date(date.today().year, int(m[1]), int(m[2]))
+        except ValueError:
+            return None
+    return None
+
+
+def note_ids(notes_dir: Path) -> set[int]:
+    ids = set()
+    if notes_dir.is_dir():
+        for p in notes_dir.glob("*.md"):
+            m = re.match(r"(\d+)-", p.name)
+            if m:
+                ids.add(int(m[1]))
+    return ids
+
+
+def fmt_date(s: str, cfg: dict, is_due: bool) -> Text:
+    if not s:
+        return Text("-", style="dim")
+    d = parse_date(s)
+    if d is None:
+        return Text(s, style="red")  # 解釈できない日付
+    label = f"{d:%m/%d}"
+    if not is_due:
+        return Text(label, style="dim" if d > date.today() else "")
+    days = (d - date.today()).days
+    if days < 0:
+        return Text(f"{label} ({-days}日超過)", style=cfg["due"]["overdue"])
+    if days == 0:
+        return Text(f"{label} (今日)", style=cfg["due"]["overdue"])
+    if days <= cfg["due"]["soon_days"]:
+        return Text(f"{label} (あと{days}日)", style=cfg["due"]["soon"])
+    return Text(label)
+
+
+def render(todo_path: Path, cfg: dict, width: int = 120):
+    if not todo_path.exists():
+        return Text(f"{todo_path} が見つかりません", style="bold red")
+    sections = parse(todo_path.read_text())
+    have_notes = note_ids(todo_path.parent / "notes")
+    status_styles: dict = cfg["status"]
+    parts = []
+    total = 0
+    # 象限をまたいで列幅をそろえる
+    all_rows = [r.cells for sec in sections for r in sec.rows]
+    w_id = max([2] + [len(c.get("id", "")) for c in all_rows])
+    w_st = max([6] + [len(c.get("status", "") or "none") for c in all_rows])
+    w_due = max([3] + [fmt_date(c.get("due", ""), cfg, True).cell_len for c in all_rows])
+    w_name = max([4] + [Text(c.get("name", "")).cell_len for c in all_rows])
+    # 端末幅に収まらない分は名前列を縮めて折り返す（罫線 7 + 余白 12 + note 列 4）
+    w_name = max(8, min(w_name, width - (w_id + w_st + 5 + w_due + 4 + 19)))
+    for sec in sections:
+        qstyle = cfg["quadrant"].get(sec.title.split("（")[0].split("(")[0].strip(), "bold")
+        parts.append(Text(f"■ {sec.title}  ({len(sec.rows)})", style=qstyle))
+        total += len(sec.rows)
+        if not sec.rows:
+            parts.append(Text("  ―", style="dim"))
+            parts.append(Text(""))
+            continue
+        t = Table(box=box.ROUNDED, padding=(0, 1), header_style="dim",
+                  border_style=cfg["border"], show_lines=True)
+        t.add_column("id", justify="right", style="cyan", width=w_id)
+        t.add_column("status", width=w_st)
+        # 名前列は全象限で最長の名前に合わせる（端末が狭ければ折り返す）
+        t.add_column("name", width=w_name, overflow="fold")
+        t.add_column("start", width=5)
+        t.add_column("due", width=w_due)
+        t.add_column("note", justify="center")
+        for r in sec.rows:
+            c = r.cells
+            sid = c.get("id", "")
+            st = c.get("status", "").strip() or "none"
+            st_style = status_styles.get(st, cfg["unknown_status"])
+            st_text = Text(st, style=st_style)
+            # notes 列と実ファイルの食い違いは赤で示す
+            claimed = c.get("notes", "").lower() == "o"
+            exists = sid.isdigit() and int(sid) in have_notes
+            if claimed and exists:
+                n = Text("●", style="green")
+            elif not claimed and not exists:
+                n = Text("·", style="dim")
+            else:
+                n = Text("!", style="bold red")
+            name_style = "dim" if st == "none" else ""
+            t.add_row(sid, st_text, Text(c.get("name", ""), style=name_style),
+                      fmt_date(c.get("start", ""), cfg, False),
+                      fmt_date(c.get("due", ""), cfg, True), n)
+        parts.append(t)
+        parts.append(Text(""))
+    header = Text.assemble(
+        ("TODO ", "bold"), (f"{total} 件", ""),
+        (f"   {date.today():%Y-%m-%d (%a)}  updated {datetime.fromtimestamp(todo_path.stat().st_mtime):%H:%M:%S}", "dim"),
+    )
+    return Group(header, legend(cfg), Text(""), *parts)
+
+
+def legend(cfg: dict) -> Text:
+    t = Text("status: ", style="dim")
+    for name, style in cfg["status"].items():
+        t.append(name, style=style)
+        t.append("  ")
+    t.append("\nnote:   ", style="dim")
+    t.append("●", style="green")
+    t.append(" あり  ")
+    t.append("·", style="dim")
+    t.append(" なし  ")
+    t.append("!", style="bold red")
+    t.append(" 不整合")
+    t.append("\ndue:    ", style="dim")
+    t.append("超過・今日", style=cfg["due"]["overdue"])
+    t.append("  ")
+    t.append(f"{cfg['due']['soon_days']}日以内", style=cfg["due"]["soon"])
+    return t
+
+
+class Viewport:
+    """描画済みの行のうち、offset から height 行だけを出す。はみ出すときは最終行に案内を出す。"""
+
+    def __init__(self, lines: list[list[Segment]], offset: int, height: int):
+        self.lines, self.offset, self.height = lines, offset, height
+
+    def __rich_console__(self, console, options):
+        total = len(self.lines)
+        if total <= self.height:
+            shown, hint = self.lines, None
+        else:
+            body = self.height - 1
+            shown = self.lines[self.offset:self.offset + body]
+            below = total - self.offset - len(shown)
+            hint = Text(f"  {self.offset + 1}-{self.offset + len(shown)} / {total} 行"
+                        f"{'  ↓ 続きあり' if below else ''}   j/k ↑↓  Space/b  g/G", style="dim")
+        for line in shown:
+            yield from line
+            yield Segment.line()
+        if hint is not None:
+            yield hint
+
+
+# 入力のバイト列 → スクロール量（"page" は 1 画面、"top"/"end" は端まで）
+SCROLL_KEYS = {
+    b"j": 1, b"\x1b[B": 1, b"\x1bOB": 1,
+    b"k": -1, b"\x1b[A": -1, b"\x1bOA": -1,
+    b" ": "page", b"\x1b[6~": "page", b"\x06": "page",
+    b"b": "-page", b"\x1b[5~": "-page", b"\x02": "-page",
+    b"g": "top", b"\x1b[H": "top", b"\x1b[1~": "top",
+    b"G": "end", b"\x1b[F": "end", b"\x1b[4~": "end",
+}
+
+
+def split_keys(data: bytes) -> list[bytes]:
+    """一度に読めたバイト列を、エスケープシーケンス単位のキーに分ける。"""
+    keys = re.findall(rb"\x1b\[[0-9;]*[A-Za-z~]|\x1bO[A-Za-z]|\x1b|[\x00-\x7f]|[\x80-\xff]+", data)
+    return keys
+
+
+def stamp(p: Path, cfg_p: Path):
+    vals = []
+    for x in (p, cfg_p, p.parent / "notes"):
+        try:
+            vals.append(x.stat().st_mtime_ns)
+        except FileNotFoundError:
+            vals.append(0)
+    return tuple(vals)
+
+
+def herdr_zoom(on: bool) -> None:
+    """herdr 上なら、編集中だけ自分のペインを最大化する（失敗しても無視）。"""
+    pane = os.environ.get("HERDR_PANE_ID")
+    if not pane or not shutil.which("herdr"):
+        return
+    subprocess.run(["herdr", "pane", "zoom", pane, "--on" if on else "--off"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
+
+def edit(todo_path: Path, fd: int, old_attrs) -> None:
+    """端末を元のモードに戻して $EDITOR を開き、終わったら cbreak に戻す。"""
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
+    termios.tcsetattr(fd, termios.TCSADRAIN, old_attrs)
+    herdr_zoom(True)
+    try:
+        subprocess.run([*shlex.split(editor), str(todo_path)], check=False)
+    finally:
+        herdr_zoom(False)
+        tty.setcbreak(fd)
+
+
+def main() -> int:
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    once = "--once" in sys.argv
+    todo_path = Path(args[0]).expanduser().resolve() if args else REPO_ROOT / "data" / "active.md"
+    console = Console()
+
+    if once or not sys.stdin.isatty():
+        console.print(render(todo_path, load_config(), console.width))
+        return 0
+
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    last_size = None
+    last_day = None
+    lines: list[list[Segment]] = []
+    offset = 0
+    try:
+        tty.setcbreak(fd)
+        quit_ = False
+        while not quit_:
+            want_edit = False
+            last = None  # 画面に入り直したら必ず描き直す
+            with console.screen(hide_cursor=True) as screen:
+                # ホイールを ↑↓ に変換してもらう（alternate scroll mode。対応していない端末では無視される）
+                sys.stdout.write("\x1b[?1007h")
+                sys.stdout.flush()
+                while True:
+                    cur = stamp(todo_path, CONFIG_PATH)
+                    size = os.get_terminal_size()
+                    dirty = False
+                    if (cur, size, date.today()) != (last, last_size, last_day):
+                        last, last_size, last_day = cur, size, date.today()
+                        try:
+                            body = render(todo_path, load_config(), size.columns)
+                        except Exception as e:  # 書きかけのファイル等で落ちないように
+                            body = Text(f"描画エラー: {e}", style="bold red")
+                        lines = console.render_lines(
+                            body, console.options.update(width=size.columns, height=None), pad=False)
+                        dirty = True
+                    else:
+                        r, _, _ = select.select([fd], [], [], 0.5)
+                        if not r:
+                            continue
+                        data = os.read(fd, 64)
+                        # エスケープシーケンスが分かれて届いたときのために、続きを少しだけ待つ
+                        if data.endswith(b"\x1b") or re.search(rb"\x1b(\[[0-9;]*)?$", data):
+                            if select.select([fd], [], [], 0.02)[0]:
+                                data += os.read(fd, 64)
+                        for key in split_keys(data):
+                            if key in (b"q", b"Q"):
+                                quit_ = True
+                            elif key == b"r":
+                                last = None
+                            elif key == b"\x05":  # Ctrl-E
+                                want_edit = True
+                            elif key in SCROLL_KEYS:
+                                step = SCROLL_KEYS[key]
+                                page = max(1, size.lines - 2)
+                                step = {"page": page, "-page": -page,
+                                        "top": -len(lines), "end": len(lines)}.get(step, step)
+                                offset += step
+                                dirty = True
+                        if quit_ or want_edit:
+                            break
+                    # 最終行は案内に使うので、本文は height - 1 行まで
+                    max_off = max(0, len(lines) - (size.lines - 1)) if len(lines) > size.lines else 0
+                    offset = min(max(0, offset), max_off)
+                    if dirty:
+                        screen.update(Viewport(lines, offset, size.lines))
+            # alternate screen を抜けてからエディタに端末を渡す
+            if want_edit:
+                edit(todo_path, fd, old)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
