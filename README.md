@@ -15,6 +15,7 @@ todo/
 │   ├── todo-next-id       # 次に振る id を表示
 │   ├── todo-view.toml     # status / 象限 / 期限の色設定（既定値）
 │   └── todo-view.local.toml # 手元だけの上書き（任意。git 管理しない）
+├── contrib/herdr/todo-herdr # herdr にビューアとエージェントを並べる（任意）
 ├── data/                  # 実データ。このリポジトリでは管理しない（手元専用の別 git リポジトリ）
 │   ├── active.md          # 未完了の TODO（4 象限のテーブル）
 │   ├── archive.md         # 完了した TODO
@@ -80,3 +81,14 @@ claude --agent todo   # リポジトリのディレクトリで起動する
 役割は `.claude/agents/todo.md`、データのルールは `CLAUDE.md` にある。TODO を追加・更新・アーカイブする。「30 をやりたい」のように id で指示できる。
 
 新しい TODO の id は `scripts/todo-next-id` が払い出す（エージェントが TODO を足すときに使う）。
+
+### herdr で並べる（任意）
+
+```sh
+contrib/herdr/todo-herdr
+```
+
+- [herdr](https://herdr.dev) に `todo` ワークスペースを作り、左上に `todo-view`、左下に `claude --agent todo`、右に `todo-notes` を並べる
+- ワークスペースが既にあれば、`todo-view`・`todo-notes` が止まっているペインだけで起動し直す（herdr の再起動ではビューアが戻らないため）
+- ペインの配置は作者の好みの例。合わなければスクリプトを書き換えて使う
+- herdr と jq が必要

@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# herdr に todo ワークスペースを作り、todo-view・todo-notes と ToDo の Claude を起動する。
+# ワークスペースが既にあれば、todo-view・todo-notes が止まっているペインでそれだけを起動し直す。
+# 使い方: contrib/herdr/todo-herdr
+set -euo pipefail
+
+todo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+workspace_id="$(herdr workspace list | jq -r '.result.workspaces[] | select(.label == "todo") | .workspace_id' | head -n 1)"
+
+if [[ -z "$workspace_id" ]]; then
+  created="$(herdr workspace create --cwd "$todo_dir" --label todo --no-focus)"
+  herdr tab rename "$(jq -r .result.tab.tab_id <<<"$created")" ToDo >/dev/null
+  todo_pane_id="$(jq -r .result.root_pane.pane_id <<<"$created")"
+  # NOTE: ペインの巡回は作った順に回るため、左下を右より先に作る。右の列を縦いっぱいにするには先に右へ分ける必要があるので、作ってから入れ替える。
+  todo_notes_pane_id="$(herdr pane split "$todo_pane_id" --direction right --ratio 0.61 --cwd "$todo_dir/data/notes" --no-focus | jq -r .result.pane.pane_id)"
+  todo_agent_pane_id="$(herdr pane split "$todo_pane_id" --direction down --ratio 0.5 --cwd "$todo_dir" --no-focus | jq -r .result.pane.pane_id)"
+  herdr pane swap --source-pane "$todo_notes_pane_id" --target-pane "$todo_agent_pane_id" >/dev/null
+  # NOTE: 入れ替えると左下のペインが選ばれるため、ToDo の一覧の左上に戻す。
+  herdr pane focus --pane "$todo_notes_pane_id" --direction up >/dev/null
+  herdr agent rename todo --clear >/dev/null 2>&1 || true
+  # NOTE: 作成直後のペインはシェルが起動しきっておらず、agent start が agent_pane_busy で弾かれるため、起動するまで再試行する。
+  deadline=$((SECONDS + 30))
+  until start_error="$(herdr agent start todo --kind claude --pane "$todo_agent_pane_id" -- --agent todo 2>&1 >/dev/null)"; do
+    if [[ "$start_error" != *agent_pane_busy* || $SECONDS -ge $deadline ]]; then
+      printf '%s\n' "$start_error" >&2
+      exit 1
+    fi
+    sleep 0.5
+  done
+else
+  # NOTE: herdr の再起動ではペインの配置と cwd は戻るがビューアは戻らないため、cwd でペインを見分ける。
+  panes_json="$(herdr pane list | jq -c --arg w "$workspace_id" '[.result.panes[] | select(.workspace_id == $w)]')"
+  todo_pane_id="$(jq -r --arg c "$todo_dir" '.[] | select(.agent == null and .cwd == $c) | .pane_id' <<<"$panes_json" | head -n 1)"
+  todo_notes_pane_id="$(jq -r --arg c "$todo_dir/data/notes" '.[] | select(.cwd == $c) | .pane_id' <<<"$panes_json" | head -n 1)"
+fi
+
+# NOTE: 動いているペインに打ち込むとビューアへの入力になるため、止まっているペインだけで起動する。
+start_viewer() {
+  herdr pane process-info --pane "$1" | jq -e --arg s "$2" '.result.process_info.foreground_processes | any((.cmdline // "") | contains($s))' >/dev/null && return
+  herdr pane run "$1" "$todo_dir/scripts/$2" >/dev/null
+}
+start_viewer "$todo_pane_id" todo-view
+start_viewer "$todo_notes_pane_id" todo-notes
