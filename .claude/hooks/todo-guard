@@ -1,0 +1,242 @@
+#!/usr/bin/env python3
+# todo エージェント（claude --agent todo）用の PreToolUse フック。
+# .claude/agents/todo.md の frontmatter から呼ばれ、data/ の外を変える操作を拒否する。
+#   - Edit / Write / MultiEdit / NotebookEdit: 書き込み先が data/ の外なら拒否
+#   - Bash: 次のものを拒否
+#       - git: 作業ディレクトリ（cd・-C・--git-dir・--work-tree で決まる）が data/ の外で、
+#         読み取り系（status・log・diff・show など）以外のサブコマンド
+#       - rm・mv・cp・touch・mkdir・tee・sed -i などのファイル変更、> / >> のリダイレクトで、
+#         対象が data/ の外のもの（/dev/null などは除く）
+#     data/ での git（git -C data commit、cd data && git commit）や scripts/todo-next-id、読み取り系は通す。
+# 入力: フックの JSON（stdin）。拒否するときだけ permissionDecision: deny の JSON を stdout に出す。
+#
+# NOTE: コマンドを文字列として読んでいるだけなので完全ではない（bash -c・python -c・変数展開・
+#       スクリプト内部の書き込みなどは見えない）。悪意のある回避を防ぐものではなく、
+#       うっかり役割を超えるのを止める柵として置いている。
+import json
+import os
+import re
+import shlex
+import sys
+
+DENY_MESSAGE = "data/ の外の変更は todo エージェントの役割外です。開発用のセッションに頼んでください"
+
+# data/ の外でも通す git のサブコマンド（読み取りだけのもの）
+GIT_READONLY = {
+    "status", "log", "diff", "show", "blame", "grep", "ls-files", "ls-tree", "rev-parse",
+    "describe", "shortlog", "cat-file", "whatchanged", "help", "version", "--version", "--help",
+}
+# 引数のパスをすべて data/ の中に限るコマンド
+WRITE_ALL_ARGS = {"rm", "rmdir", "mv", "touch", "mkdir", "tee", "truncate", "unlink", "shred"}
+# 最初の引数（モード・所有者）を除いたパスを data/ の中に限るコマンド
+WRITE_AFTER_FIRST = {"chmod", "chown", "chgrp"}
+# 書き込み先（最後の引数か -t の値）を data/ の中に限るコマンド
+WRITE_DEST = {"cp", "ln", "install", "rsync"}
+# 引数の中身は見ずに、書き込み先がわからないので拒否するコマンド
+OPAQUE = {"dd"}
+
+REDIRECT_OUT = {">", ">>", ">|", "&>", "&>>", ">&"}
+REDIRECT_IN = {"<", "<<", "<<<", "<&", "<<-"}
+SEPARATORS = {"&&", "||", ";", "|", "&", "\n", "|&", ";;", "(", ")"}
+SAFE_TARGETS = {"/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty"}
+
+
+class Denied(Exception):
+    pass
+
+
+def project_dir(hook_input):
+    d = os.environ.get("CLAUDE_PROJECT_DIR")
+    if not d:
+        d = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+    return os.path.realpath(d)
+
+
+def resolve(path, cwd):
+    path = os.path.expanduser(os.path.expandvars(path))
+    if not os.path.isabs(path):
+        path = os.path.join(cwd, path)
+    return os.path.realpath(path)
+
+
+def inside(path, data_dir):
+    return path == data_dir or path.startswith(data_dir + os.sep)
+
+
+def check_path(path, cwd, data_dir, what):
+    if path in SAFE_TARGETS or path.startswith("/dev/fd/"):
+        return
+    if not inside(resolve(path, cwd), data_dir):
+        raise Denied(f"{what} の対象 {path} が data/ の外です")
+
+
+# ---- ファイル編集ツール ----
+
+def check_file_tool(tool, tool_input, cwd, data_dir):
+    path = tool_input.get("file_path") or tool_input.get("notebook_path")
+    if not path:
+        return
+    check_path(path, cwd, data_dir, tool)
+
+
+# ---- Bash ----
+
+def strip_heredocs(command):
+    """ヒアドキュメントの本文を取り除く（本文の行をコマンドとして読まないため）。"""
+    out, delims = [], []
+    for line in command.split("\n"):
+        if delims:
+            if line.strip() == delims[0]:
+                delims.pop(0)
+            continue
+        out.append(line)
+        delims += re.findall(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?", line)
+    return "\n".join(out)
+
+
+def tokenize(command):
+    lex = shlex.shlex(strip_heredocs(command), posix=True, punctuation_chars="();<>|&\n")
+    lex.whitespace = " \t\r"
+    lex.whitespace_split = True
+    return list(lex)
+
+
+def split_commands(tokens):
+    """トークン列を [(words, redirect_targets)] に分ける。"""
+    commands, words, targets = [], [], []
+    i = 0
+    while i < len(tokens):
+        t = tokens[i]
+        if t in SEPARATORS:
+            if words or targets:
+                commands.append((words, targets))
+            words, targets = [], []
+        elif t in REDIRECT_OUT or t in REDIRECT_IN:
+            # 2>file の 2 のような fd 番号は引数から外す
+            if words and words[-1].isdigit() and i > 0 and tokens[i - 1] == words[-1]:
+                words.pop()
+            target = tokens[i + 1] if i + 1 < len(tokens) else ""
+            if t in REDIRECT_OUT and target and not target.isdigit() and target != "-":
+                targets.append(target)
+            i += 1
+        else:
+            words.append(t)
+        i += 1
+    if words or targets:
+        commands.append((words, targets))
+    return commands
+
+
+def non_options(args):
+    return [a for a in args if not a.startswith("-")]
+
+
+def check_git(args, cwd, data_dir):
+    git_cwd = cwd
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-C" and i + 1 < len(args):
+            git_cwd = resolve(args[i + 1], git_cwd)
+            i += 2
+        elif a in ("--git-dir", "--work-tree") and i + 1 < len(args):
+            git_cwd = resolve(args[i + 1], git_cwd)
+            i += 2
+        elif a.startswith("--git-dir=") or a.startswith("--work-tree="):
+            git_cwd = resolve(a.split("=", 1)[1], git_cwd)
+            i += 1
+        elif a in ("-c", "--namespace") and i + 1 < len(args):
+            i += 2
+        elif a.startswith("-"):
+            i += 1
+        else:
+            break
+    sub = args[i] if i < len(args) else ""
+    if inside(git_cwd, data_dir):
+        return
+    if sub in GIT_READONLY or sub == "":
+        return
+    raise Denied(f"git {sub} を data/ の外（{git_cwd}）で実行しようとしています")
+
+
+def check_sed_like(name, args, cwd, data_dir):
+    if not any(a == "-i" or a.startswith("-i") or a.startswith("--in-place") for a in args):
+        return
+    files = non_options(args)
+    # -e / -f が無ければ最初の非オプション引数はスクリプト
+    if not any(a in ("-e", "-f") or a.startswith("--expression") or a.startswith("--file") for a in args):
+        files = files[1:]
+    for f in files:
+        check_path(f, cwd, data_dir, f"{name} -i")
+
+
+def check_bash(command, cwd, data_dir):
+    try:
+        tokens = tokenize(command)
+    except ValueError as e:
+        raise Denied(f"コマンドを解析できません（{e}）")
+
+    for words, targets in split_commands(tokens):
+        for t in targets:
+            check_path(t, cwd, data_dir, "リダイレクト")
+        # 先頭の VAR=value・env・command・sudo などを読み飛ばす
+        while words and (re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]) or words[0] in ("env", "command", "builtin", "nohup", "time", "sudo", "exec")):
+            words = words[1:]
+        if not words:
+            continue
+        name, args = os.path.basename(words[0]), words[1:]
+
+        if name in ("cd", "pushd"):
+            dest = non_options(args)
+            cwd = resolve(dest[0], cwd) if dest else os.path.expanduser("~")
+        elif name == "git":
+            check_git(args, cwd, data_dir)
+        elif name in WRITE_ALL_ARGS:
+            for p in non_options(args):
+                check_path(p, cwd, data_dir, name)
+        elif name in WRITE_AFTER_FIRST:
+            for p in non_options(args)[1:]:
+                check_path(p, cwd, data_dir, name)
+        elif name in WRITE_DEST:
+            dest = None
+            for j, a in enumerate(args):
+                if a in ("-t", "--target-directory") and j + 1 < len(args):
+                    dest = args[j + 1]
+                elif a.startswith("--target-directory="):
+                    dest = a.split("=", 1)[1]
+            paths = non_options(args)
+            if dest is None and paths:
+                dest = paths[-1]
+            if dest is not None:
+                check_path(dest, cwd, data_dir, name)
+        elif name in ("sed", "perl"):
+            check_sed_like(name, args, cwd, data_dir)
+        elif name in OPAQUE:
+            raise Denied(f"{name} の書き込み先を判定できません")
+
+
+def main():
+    hook_input = json.load(sys.stdin)
+    tool = hook_input.get("tool_name", "")
+    tool_input = hook_input.get("tool_input") or {}
+    data_dir = os.path.join(project_dir(hook_input), "data")
+    data_dir = os.path.realpath(data_dir)
+    cwd = hook_input.get("cwd") or os.getcwd()
+
+    try:
+        if tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+            check_file_tool(tool, tool_input, cwd, data_dir)
+        elif tool == "Bash":
+            check_bash(tool_input.get("command", ""), cwd, data_dir)
+    except Denied as e:
+        json.dump({
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": f"{DENY_MESSAGE}（{e}）",
+            }
+        }, sys.stdout, ensure_ascii=False)
+
+
+if __name__ == "__main__":
+    main()

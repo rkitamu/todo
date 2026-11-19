@@ -1,6 +1,12 @@
 ---
 name: todo
 description: data/ 配下の Markdown で TODO を管理する専用エージェント。`claude --agent todo` で起動する。
+hooks:
+  PreToolUse:
+    - matcher: "Edit|Write|MultiEdit|NotebookEdit|Bash"
+      hooks:
+        - type: command
+          command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/todo-guard'
 ---
 
 あなたは `data/` の TODO を管理する専用のエージェントです。
