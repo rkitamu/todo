@@ -8,7 +8,7 @@ TODO を Markdown で管理し、Claude Code に操作させるための仕組�
 todo/
 ├── CLAUDE.md              # リポジトリの思想とデータのルール
 ├── .claude/agents/todo.md # TODO 管理エージェントの役割（claude --agent todo）
-├── .claude/hooks/todo-guard # todo エージェントが data/ の外を変えないようにするフック
+├── .claude/hooks/todo-guard # todo エージェントのガード
 ├── install.sh             # data/ の用意と uv の確認
 ├── scripts/
 │   ├── todo-view          # active.md の色付きビューア
@@ -79,8 +79,7 @@ scripts/todo-notes demo/notes     # 別の notes ディレクトリ
 claude --agent todo   # リポジトリのディレクトリで起動する
 ```
 
-- todo エージェントでは、`data/` の外を変える操作（`data/` の外のファイルの編集、リポジトリ本体での `git pull` など）を `.claude/hooks/todo-guard` が拒否する。`.claude/agents/todo.md` の frontmatter の hooks で効かせているので、`--agent todo` 以外のセッションには影響しない
-- 判定はコマンドの文字列を見ているだけで完全ではない。うっかり役割を超えるのを止める柵という位置づけ
+- todo エージェントは `data/` の外を変更しない（変更しようとすると止まる）
 
 役割は `.claude/agents/todo.md`、データのルールは `CLAUDE.md` にある。TODO を追加・更新・アーカイブする。「30 をやりたい」のように id で指示できる。
 
