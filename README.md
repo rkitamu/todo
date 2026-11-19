@@ -8,7 +8,8 @@ TODO を Markdown で管理し、Claude Code に操作させるための仕組�
 todo/
 ├── CLAUDE.md              # リポジトリの思想とデータのルール
 ├── .claude/agents/todo.md # TODO 管理エージェントの役割（claude --agent todo）
-├── install.sh             # data/ の用意と uv の確認
+├── install.sh             # data/ の用意、commit-msg フックの有効化、uv の確認
+├── .githooks/commit-msg   # コミットメッセージを Conventional Commits に限る
 ├── scripts/
 │   ├── todo-view          # active.md の色付きビューア
 │   ├── todo-notes         # notes を id の数字順に選んで leaf で開く
@@ -41,6 +42,7 @@ cd todo
 ```
 
 - `data/` が無ければ `data.template/` から作り、手元専用の git リポジトリとして初期コミットする（既にあれば触らない）。別のマシンにデータを移すときは `data/` ごとコピーする
+- `core.hooksPath` を `.githooks` にして、commit-msg フックを有効にする。件名は Conventional Commits の形（`feat(todo-view): 説明` など。説明は日本語でよい）にし、件名の次の行は空ける。`.git/hooks/commit-msg` があれば先にそれも呼ぶ。`data/` の git リポジトリには影響しない
 - uv が見つからなければ警告する
 - 再実行してもよい
 - `scripts/` のコマンドは PATH に置かない。複数の環境に clone しても混ざらないよう、リポジトリのディレクトリから `scripts/todo-view` のような相対パスで実行する
