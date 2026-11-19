@@ -18,7 +18,7 @@ DATA="${1:-$REPO/data}"
   [[ -f "$DATA/archive.md" ]] && awk -F'|' '/^\|/ { gsub(/ /, "", $3); if ($3 ~ /^[0-9]+$/) print $3 }' "$DATA/archive.md"
   # notes/<id>-<slug>.md
   if [[ -d "$DATA/notes" ]]; then
-    find "$DATA/notes" -maxdepth 1 -name '*.md' -printf '%f\n' | sed -n 's/^\([0-9][0-9]*\)-.*/\1/p'
+    find "$DATA/notes" -maxdepth 1 -name '*.md' -exec basename {} \; | sed -n 's/^\([0-9][0-9]*\)-.*/\1/p'
   fi
   echo 0
 } | sort -n | tail -1 | awk '{ print $1 + 1 }'
