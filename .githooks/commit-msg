@@ -1,0 +1,65 @@
+#!/bin/sh
+# todo リポジトリの commit-msg フック。install.sh が core.hooksPath=.githooks にして有効にする。
+#   - 件名を Conventional Commits の形（<type>(<scope>)!: <説明>）に限る。説明は日本語でよい
+#   - 2 行目があるときは空行に限る（件名と本文のあいだの空行が抜けるのを防ぐ）
+#   - git が自動で作るメッセージ（Merge / Revert " / fixup! / squash! / amend!）は通す
+# core.hooksPath を変えると .git/hooks は呼ばれなくなるので、.git/hooks/commit-msg があれば先に呼ぶ。
+set -eu
+
+msg_file=$1
+
+# ---- .git/hooks/commit-msg（あれば先に呼ぶ）----
+abspath() {
+  (cd -P "$(dirname "$1")" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$(basename "$1")")
+}
+legacy="$(git rev-parse --git-common-dir)/hooks/commit-msg"
+if [ -x "$legacy" ] && [ "$(abspath "$legacy")" != "$(abspath "$0")" ]; then
+  "$legacy" "$@"
+fi
+
+# ---- メッセージを読む ----
+# コメント行（#）を除き、先頭の空行を飛ばす。git commit -v の差分（scissors 行以降）は読まない。
+cleaned=$(awk '
+  /^# -+ >8 -+$/ { exit }
+  /^#/ { next }
+  !started && /^[[:space:]]*$/ { next }
+  { started = 1; print }
+' "$msg_file")
+
+subject=$(printf '%s\n' "$cleaned" | sed -n 1p)
+second=$(printf '%s\n' "$cleaned" | sed -n 2p)
+
+# 空のメッセージは git 自身が止めるので任せる
+[ -n "$subject" ] || exit 0
+
+# git が自動で作るメッセージは通す
+case $subject in
+  'Merge '* | 'Revert "'* | 'fixup! '* | 'squash! '* | 'amend! '*) exit 0 ;;
+esac
+
+types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
+ng=0
+
+if ! printf '%s\n' "$subject" | grep -Eq "^($types)(\([^)]+\))?!?: .+"; then
+  cat >&2 <<MSG
+commit-msg: 件名が Conventional Commits の形になっていません。
+  件名: $subject
+
+  形:   <type>(<scope>)!: <説明>   （scope と ! は省略可。コロンの後に空白 1 つ）
+  type: $(printf '%s' "$types" | sed 's/|/, /g')
+  例:   feat(todo-view): 期限切れの行を赤くする
+        fix: todo-next-id が notes の id を拾わない
+        docs(readme): セットアップ手順を直す
+MSG
+  ng=1
+fi
+
+if [ -n "$(printf '%s' "$second" | tr -d '[:space:]')" ]; then
+  cat >&2 <<MSG
+commit-msg: 件名の次の行が空行ではありません。件名と本文のあいだに空行を 1 行入れてください。
+  1 行目: $subject
+  2 行目: $second
+MSG
+  ng=1
+fi
+exit "$ng"
