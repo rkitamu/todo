@@ -11,7 +11,7 @@ TODO を手元の Markdown で持ち、Claude Code に操作させるための�
 
 - `data/active.md` — 未完了の TODO 一覧（アイゼンハワー・マトリクスの 4 象限）
 - `data/notes/<id>-<slug>.md` — 詳細・作業記録が必要な TODO のメモ。完了しても移動・削除しない
-- `data/archive.md` — 完了した TODO の記録（追記のみ）
+- `data/archive.md` — 完了・中止した TODO の記録（先頭に追記する）
 - `demo/` — 表示確認用のダミーデータ（`scripts/todo-view demo/active.md` で見られる）。実データではない
 - `data.template/` — 空の `data/` の雛形。`install.sh` が `data/` が無いときにこれをコピーする
 
@@ -21,10 +21,10 @@ TODO を手元の Markdown で持ち、Claude Code に操作させるための�
 
 見出しは次の 4 つで固定。順番も変えない（緊急のものが上に来る順）。
 
-- `## Necessary（緊急かつ重要）`
-- `## Distraction（緊急だが重要でない）`
-- `## Effective（重要だが緊急でない）`
-- `## Waste（緊急でも重要でもない）`
+- `## Necessity（重要・緊急）`
+- `## Distraction（重要でない・緊急）`
+- `## Productivity（重要・急がない）`
+- `## Waste（重要でない・急がない）`
 
 各見出しの下に 1 つの Markdown テーブルを置く。列は次の順。
 
@@ -33,14 +33,19 @@ TODO を手元の Markdown で持ち、Claude Code に操作させるための�
 | id | 整数。全 TODO に必ず振る |
 | status | `none`（未着手）/ `wip`（作業中）/ `pending`（止まっている。理由は問わない） |
 | name | 1 行の短い説明。`|` は使わない |
-| start | 着手予定日 `YYYY-MM-DD`。無ければ空 |
-| due | 期限 `YYYY-MM-DD`。無ければ空 |
-| notes | `data/notes/` にメモがあれば `o`、無ければ `x` |
+| start | 着手予定日 `YYYY-MM-DD`。時刻があれば `YYYY-MM-DDTHH:MM` |
+| due | 期限。書き方は start と同じ |
+| notes | `data/notes/` にメモがあれば `○`、無ければ `-` |
 
+- 空のセルは `-` で埋める。指定なしの意味で、推測で埋めない。
 - 空の象限でもヘッダ行と区切り行は残す。
-- 新しい行は、その象限のテーブルの末尾に足す。並べ替えはユーザーに頼まれたときだけ行う。
+- テーブルの中では上の行ほど先にやる。新しい行を足すときは、テーブルに行があれば、どこに入れるかをユーザーに聞く。
 - 利用可能な status の一覧と色は `scripts/todo-view.toml` が正。新しい status を使うときはそこにも追記する。
 - `active.md` は `todo-view` が監視して色付きで表示している。書式を崩すと表示が壊れるので、テーブル以外の文章を書かない。
+
+## archive.md の書式
+
+完了した TODO は `- [x] <id> <name>`、やめた TODO は `- [-] <id> <name>（やめた理由）` の 1 行にして、`# Archive` の直下（先頭）に足す。
 
 ## ID の規則
 

@@ -1,21 +1,21 @@
 # TODO
 
-## Necessary（緊急かつ重要）
+## Necessity（重要・緊急）
 
 | id | status | name | start | due | notes |
 |----|--------|------|-------|-----|-------|
 
-## Distraction（緊急だが重要でない）
+## Distraction（重要でない・緊急）
 
 | id | status | name | start | due | notes |
 |----|--------|------|-------|-----|-------|
 
-## Effective（重要だが緊急でない）
+## Productivity（重要・急がない）
 
 | id | status | name | start | due | notes |
 |----|--------|------|-------|-----|-------|
 
-## Waste（緊急でも重要でもない）
+## Waste（重要でない・急がない）
 
 | id | status | name | start | due | notes |
 |----|--------|------|-------|-----|-------|

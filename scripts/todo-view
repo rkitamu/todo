@@ -100,7 +100,7 @@ def parse(md: str) -> list[Section]:
 
 
 def parse_date(s: str) -> date | None:
-    s = s.strip()
+    s = s.strip().split("T")[0]  # 時刻は色の判定に使わない
     for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
         try:
             return datetime.strptime(s, fmt).date()
@@ -126,12 +126,15 @@ def note_ids(notes_dir: Path) -> set[int]:
 
 
 def fmt_date(s: str, cfg: dict, is_due: bool) -> Text:
-    if not s:
+    s = s.strip()
+    if s in ("", "-"):
         return Text("-", style="dim")
     d = parse_date(s)
     if d is None:
         return Text(s, style="red")  # 解釈できない日付
     label = f"{d:%m/%d}"
+    if "T" in s:
+        label += " " + s.split("T", 1)[1]
     if not is_due:
         return Text(label, style="dim" if d > date.today() else "")
     days = (d - date.today()).days
@@ -156,10 +159,11 @@ def render(todo_path: Path, cfg: dict, width: int = 120):
     all_rows = [r.cells for sec in sections for r in sec.rows]
     w_id = max([2] + [len(c.get("id", "")) for c in all_rows])
     w_st = max([6] + [len(c.get("status", "") or "none") for c in all_rows])
+    w_start = max([5] + [fmt_date(c.get("start", ""), cfg, False).cell_len for c in all_rows])
     w_due = max([3] + [fmt_date(c.get("due", ""), cfg, True).cell_len for c in all_rows])
     w_name = max([4] + [Text(c.get("name", "")).cell_len for c in all_rows])
     # 端末幅に収まらない分は名前列を縮めて折り返す（罫線 7 + 余白 12 + note 列 4）
-    w_name = max(8, min(w_name, width - (w_id + w_st + 5 + w_due + 4 + 19)))
+    w_name = max(8, min(w_name, width - (w_id + w_st + w_start + w_due + 4 + 19)))
     for sec in sections:
         qstyle = cfg["quadrant"].get(sec.title.split("（")[0].split("(")[0].strip(), "bold")
         parts.append(Text(f"■ {sec.title}  ({len(sec.rows)})", style=qstyle))
@@ -174,7 +178,7 @@ def render(todo_path: Path, cfg: dict, width: int = 120):
         t.add_column("status", width=w_st)
         # 名前列は全象限で最長の名前に合わせる（端末が狭ければ折り返す）
         t.add_column("name", width=w_name, overflow="fold")
-        t.add_column("start", width=5)
+        t.add_column("start", width=w_start)
         t.add_column("due", width=w_due)
         t.add_column("note", justify="center")
         for r in sec.rows:
@@ -184,7 +188,7 @@ def render(todo_path: Path, cfg: dict, width: int = 120):
             st_style = status_styles.get(st, cfg["unknown_status"])
             st_text = Text(st, style=st_style)
             # notes 列と実ファイルの食い違いは赤で示す
-            claimed = c.get("notes", "").lower() == "o"
+            claimed = c.get("notes", "") == "○"
             exists = sid.isdigit() and int(sid) in have_notes
             if claimed and exists:
                 n = Text("●", style="green")

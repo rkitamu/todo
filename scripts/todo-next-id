@@ -14,8 +14,8 @@ DATA="${1:-$REPO/data}"
 {
   # active.md: | id | status | ... → 1 列目
   [[ -f "$DATA/active.md" ]] && awk -F'|' '/^\|/ { gsub(/ /, "", $2); if ($2 ~ /^[0-9]+$/) print $2 }' "$DATA/active.md"
-  # archive.md: | done | id | ... → 2 列目
-  [[ -f "$DATA/archive.md" ]] && awk -F'|' '/^\|/ { gsub(/ /, "", $3); if ($3 ~ /^[0-9]+$/) print $3 }' "$DATA/archive.md"
+  # archive.md: - [x] <id> <name> → 3 語目
+  [[ -f "$DATA/archive.md" ]] && awk '/^- \[.\] [0-9]+ / { print $3 }' "$DATA/archive.md"
   # notes/<id>-<slug>.md
   if [[ -d "$DATA/notes" ]]; then
     find "$DATA/notes" -maxdepth 1 -name '*.md' -exec basename {} \; | sed -n 's/^\([0-9][0-9]*\)-.*/\1/p'
