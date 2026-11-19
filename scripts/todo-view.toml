@@ -18,9 +18,9 @@ pending = "bold yellow"
 
 # 見出し（全角/半角括弧より前の部分）→ スタイル
 [quadrant]
-Necessary   = "bold red"
-Effective   = "bold green"
-Distraction = "bold yellow"
+Necessity    = "bold red"
+Productivity = "bold green"
+Distraction  = "bold yellow"
 Waste       = "bold white"
 
 [due]
