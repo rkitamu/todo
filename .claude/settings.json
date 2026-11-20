@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"${HERDR_ENV:-}\" = 1 ] || exit 0; nohup \"$CLAUDE_PROJECT_DIR/contrib/herdr/todo-herdr\" >/dev/null 2>&1 &",
+            "statusMessage": "herdr の todo ビューアの起動し直し"
+          }
+        ]
+      }
+    ]
+  }
+}
