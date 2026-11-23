@@ -18,9 +18,10 @@ if [[ -z "$workspace_id" ]]; then
   # NOTE: 入れ替えると左下のペインが選ばれるため、ToDo の一覧の左上に戻す。
   herdr pane focus --pane "$todo_notes_pane_id" --direction up >/dev/null
   herdr agent rename todo --clear >/dev/null 2>&1 || true
+  eval "hub_args=(${HUB_CLAUDE_ARGS:-})"
   # NOTE: 作成直後のペインはシェルが起動しきっておらず、agent start が agent_pane_busy で弾かれるため、起動するまで再試行する。
   deadline=$((SECONDS + 30))
-  until start_error="$(herdr agent start todo --kind claude --pane "$todo_agent_pane_id" -- --agent todo 2>&1 >/dev/null)"; do
+  until start_error="$(herdr agent start todo --kind claude --pane "$todo_agent_pane_id" -- --agent todo "${hub_args[@]}" 2>&1 >/dev/null)"; do
     if [[ "$start_error" != *agent_pane_busy* || $SECONDS -ge $deadline ]]; then
       printf '%s\n' "$start_error" >&2
       exit 1
