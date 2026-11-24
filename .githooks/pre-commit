@@ -1,0 +1,30 @@
+#!/bin/sh
+# todo リポジトリの pre-commit / pre-merge-commit フック。install.sh が core.hooksPath=.githooks にして有効にする。
+#   - main / master へ直接コミットしない（作業ブランチでコミットし、PR で main へ入れる）
+#   - git merge --continue のコミットもここを通るので、main 上でのマージコミットも止まる
+# core.hooksPath を変えると .git/hooks は呼ばれなくなるので、.git/hooks/<同名> があれば先に呼ぶ。
+set -eu
+
+hook=${TODO_HOOK_NAME:-$(basename "$0")}
+
+# ---- .git/hooks/<同名>（あれば先に呼ぶ）----
+abspath() {
+  (cd -P "$(dirname "$1")" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$(basename "$1")")
+}
+legacy="$(git rev-parse --git-common-dir)/hooks/$hook"
+if [ -x "$legacy" ] && [ "$(abspath "$legacy")" != "$(abspath "$0")" ]; then
+  "$legacy" "$@"
+fi
+
+# detached HEAD なら branch は空になり、止めない
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+case $branch in
+  main | master)
+    cat >&2 <<MSG
+$hook: $branch へ直接コミットできません。作業ブランチを切ってコミットし、PR で $branch へ入れてください。
+  例: git switch -c <作業ブランチ>
+MSG
+    exit 1
+    ;;
+esac
+exit 0

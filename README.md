@@ -9,8 +9,8 @@ todo/
 ├── CLAUDE.md              # リポジトリの思想とデータのルール
 ├── .claude/agents/todo.md # TODO 管理エージェントの役割（claude --agent todo）
 ├── .claude/hooks/todo-guard # todo エージェントのガード
-├── install.sh             # data/ の用意、commit-msg フックの有効化、uv の確認
-├── .githooks/commit-msg   # コミットメッセージの形を確かめるフック
+├── install.sh             # data/ の用意、git フックの有効化、uv の確認
+├── .githooks/             # git フック（コミットメッセージの形、main への直接コミット・push の拒否）
 ├── scripts/
 │   ├── todo-view          # active.md の色付きビューア
 │   ├── todo-notes         # notes を id の数字順に選んで leaf で開く
@@ -43,7 +43,9 @@ cd todo
 ```
 
 - `data/` が無ければ `data.template/` から作り、手元専用の git リポジトリとして初期コミットする（既にあれば触らない）。別のマシンにデータを移すときは `data/` ごとコピーする
-- commit-msg フックを有効にする（件名は Conventional Commits の形）
+- `.githooks/` の git フックを有効にする（`git config core.hooksPath .githooks`。clone ごとに 1 回）
+  - コミットの件名を Conventional Commits の形に限る
+  - main / master への直接コミット（マージコミットを含む）と直接 push を拒否する。作業ブランチでコミットし、PR で main へ入れる
 - uv が見つからなければ警告する
 - 再実行してもよい
 - `scripts/` のコマンドは PATH に置かない。複数の環境に clone しても混ざらないよう、リポジトリのディレクトリから `scripts/todo-view` のような相対パスで実行する

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # todo リポジトリを使えるようにする。
-#   ./install.sh  data/ が無ければ data.template/ から作り、commit-msg フックを有効にし、uv の有無を確認する
+#   ./install.sh  data/ が無ければ data.template/ から作り、git フック（.githooks/）を有効にし、uv の有無を確認する
 # scripts/ のコマンドは PATH に置かず、リポジトリからの相対パス（scripts/todo-view など）で呼ぶ。
 # 再実行してもよい（既にある data/ には触らない）。
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# コミットメッセージを確かめるフック（.githooks/commit-msg）を有効にする。
+# .githooks/ のフックを有効にする（commit-msg: メッセージの形、pre-commit / pre-merge-commit / pre-push: main への直接コミット・push の拒否）。
 # commit.cleanup=strip で、-m・-F・--no-edit のときも # のコメント行を git に消させる
 # （既定ではエディタを開いたときしか消えず、マージの '# Conflicts:' などが残る）。
 # todo リポジトリの config だけを変えるので、data/ の git リポジトリには影響しない。

@@ -1,0 +1,31 @@
+#!/bin/sh
+# todo リポジトリの pre-push フック。install.sh が core.hooksPath=.githooks にして有効にする。
+#   - remote の main / master へ直接 push しない（作業ブランチを push し、PR で main へ入れる）
+#   - main / master の削除も止める
+# core.hooksPath を変えると .git/hooks は呼ばれなくなるので、.git/hooks/pre-push があれば先に呼ぶ。
+# 標準入力（push する ref の一覧）は 1 度しか読めないので、保存してから両方に渡す。
+set -eu
+
+abspath() {
+  (cd -P "$(dirname "$1")" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$(basename "$1")")
+}
+
+refs=$(cat)
+
+legacy="$(git rev-parse --git-common-dir)/hooks/pre-push"
+if [ -x "$legacy" ] && [ "$(abspath "$legacy")" != "$(abspath "$0")" ]; then
+  printf '%s\n' "$refs" | "$legacy" "$@"
+fi
+
+ng=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case $remote_ref in
+    refs/heads/main | refs/heads/master)
+      echo "pre-push: $1 の ${remote_ref#refs/heads/} へ直接 push できません。作業ブランチを push し、PR で入れてください。" >&2
+      ng=1
+      ;;
+  esac
+done <<EOF2
+$refs
+EOF2
+exit "$ng"
