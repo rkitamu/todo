@@ -12,6 +12,7 @@ TODO を手元の Markdown で持ち、Claude Code に操作させるための�
 - `data/active.md` — 未完了の TODO 一覧（アイゼンハワー・マトリクスの 4 象限）
 - `data/notes/<id>-<slug>.md` — 詳細・作業記録が必要な TODO のメモ。完了しても移動・削除しない
 - `data/archive.md` — 完了・中止した TODO の記録（先頭に追記する）
+- `data/CLAUDE.md` — その `data/` だけの運用（繰り返す TODO の扱い、今日やることの選び方など）。任意。あれば従う
 - `demo/` — 表示確認用のダミーデータ（`scripts/todo-view demo/active.md` で見られる）。実データではない
 - `data.template/` — 空の `data/` の雛形。`install.sh` が `data/` が無いときにこれをコピーする
 
