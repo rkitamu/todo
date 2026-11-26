@@ -1,5 +1,10 @@
 # TODO
 
+## Inbox（未分類）
+
+| id | status | name | start | due | notes |
+|----|--------|------|-------|-----|-------|
+
 ## Necessity（重要・緊急）
 
 | id | status | name | start | due | notes |

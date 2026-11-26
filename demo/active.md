@@ -1,5 +1,12 @@
 # TODO
 
+## Inbox（未分類）
+
+| id | status | name | start | due | notes |
+|----|--------|------|-------|-----|-------|
+| 18 | none | 自転車のライトを買い替える | - | - | - |
+| 19 | none | 年賀状を出すか決める | - | - | - |
+
 ## Necessity（重要・緊急）
 
 | id | status | name | start | due | notes |

@@ -44,6 +44,7 @@ DEFAULT_CONFIG = {
     "unknown_status": "bold magenta",
     "border": "bright_black",
     "quadrant": {},
+    "inbox": {"name": "Inbox", "warn_count": 5, "warn": "bold white on red"},
     "due": {"overdue": "bold red", "soon": "yellow", "soon_days": 3},
 }
 
@@ -99,6 +100,11 @@ def parse(md: str) -> list[Section]:
     return sections
 
 
+def section_key(title: str) -> str:
+    """見出しの全角/半角括弧より前の部分（Necessity・Inbox など）。"""
+    return title.split("（")[0].split("(")[0].strip()
+
+
 def parse_date(s: str) -> date | None:
     s = s.strip().split("T")[0]  # 時刻は色の判定に使わない
     for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
@@ -151,6 +157,11 @@ def render(todo_path: Path, cfg: dict, width: int = 120):
     if not todo_path.exists():
         return Text(f"{todo_path} が見つかりません", style="bold red")
     sections = parse(todo_path.read_text())
+    # Inbox（未分類）はファイル内の位置によらず先頭に出す
+    inbox_name = cfg["inbox"]["name"]
+    sections.sort(key=lambda sec: section_key(sec.title) != inbox_name)
+    inbox_count = sum(len(sec.rows) for sec in sections if section_key(sec.title) == inbox_name)
+    inbox_warn = inbox_count >= cfg["inbox"]["warn_count"]
     have_notes = note_ids(todo_path.parent / "notes")
     status_styles: dict = cfg["status"]
     parts = []
@@ -165,8 +176,13 @@ def render(todo_path: Path, cfg: dict, width: int = 120):
     # 端末幅に収まらない分は名前列を縮めて折り返す（罫線 7 + 余白 12 + note 列 4）
     w_name = max(8, min(w_name, width - (w_id + w_st + w_start + w_due + 4 + 19)))
     for sec in sections:
-        qstyle = cfg["quadrant"].get(sec.title.split("（")[0].split("(")[0].strip(), "bold")
-        parts.append(Text(f"■ {sec.title}  ({len(sec.rows)})", style=qstyle))
+        key = section_key(sec.title)
+        qstyle = cfg["quadrant"].get(key, "bold")
+        title = Text(f"■ {sec.title}  ({len(sec.rows)})", style=qstyle)
+        if key == inbox_name and inbox_warn:
+            title.append("  ")
+            title.append(" 溜まっています。分類してください ", style=cfg["inbox"]["warn"])
+        parts.append(title)
         total += len(sec.rows)
         if not sec.rows:
             parts.append(Text("  ―", style="dim"))
@@ -204,6 +220,9 @@ def render(todo_path: Path, cfg: dict, width: int = 120):
         parts.append(Text(""))
     header = Text.assemble(
         ("TODO ", "bold"), (f"{total} 件", ""),
+        *([(f"  {inbox_name} {inbox_count} 件",
+            cfg["inbox"]["warn"] if inbox_warn else cfg["quadrant"].get(inbox_name, "bold"))]
+          if inbox_count else []),
         (f"   {date.today():%Y-%m-%d (%a)}  updated {datetime.fromtimestamp(todo_path.stat().st_mtime):%H:%M:%S}", "dim"),
     )
     return Group(header, legend(cfg), Text(""), *parts)
