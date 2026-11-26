@@ -18,10 +18,18 @@ pending = "bold yellow"
 
 # 見出し（全角/半角括弧より前の部分）→ スタイル
 [quadrant]
+Inbox        = "bold cyan"
 Necessity    = "bold red"
 Productivity = "bold green"
 Distraction  = "bold yellow"
 Waste       = "bold white"
+
+# Inbox（未分類）の節。常に先頭に表示する。
+# warn_count 件以上溜まると、見出しと上端の件数を warn のスタイルで目立たせる。
+[inbox]
+name       = "Inbox"
+warn_count = 5
+warn       = "bold white on red"
 
 [due]
 overdue   = "bold red"   # 期限切れ・今日

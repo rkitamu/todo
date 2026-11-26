@@ -19,7 +19,7 @@ todo/
 │   └── todo-view.local.toml # 手元だけの上書き（任意。git 管理しない）
 ├── contrib/herdr/todo-herdr # herdr にビューアとエージェントを並べる（任意）
 ├── data/                  # 実データ。このリポジトリでは管理しない（手元専用の別 git リポジトリ）
-│   ├── active.md          # 未完了の TODO（4 象限のテーブル）
+│   ├── active.md          # 未完了の TODO（Inbox と 4 象限のテーブル）
 │   ├── archive.md         # 完了した TODO
 │   ├── notes/             # TODO ごとの詳細メモ（NN-slug.md）
 │   └── CLAUDE.md          # この data/ だけの運用（任意）
@@ -61,6 +61,7 @@ scripts/todo-view path/to/active.md # 別のファイルを表示
 scripts/todo-view --once            # 1 回だけ描画して終了
 ```
 
+- Inbox（未分類）を先頭に表示する。溜まると（既定は 5 件以上）見出しと上端の件数が目立つ色になる
 - `q` / `Ctrl-C` で終了、`r` で再描画
 - 画面に収まらないときはスクロールできる: `j`/`k`・`↑`/`↓`（1 行）、`Space`/`b`・`PgDn`/`PgUp`（1 画面）、`g`/`G`（先頭/末尾）。端末が対応していればマウスホイールも効く
 - `Ctrl-E` で `$VISUAL` / `$EDITOR` を開いて active.md を編集（herdr 上では編集中だけペインを最大化）
@@ -87,6 +88,9 @@ claude --agent todo   # リポジトリのディレクトリで起動する
 - todo エージェントは `data/` の外を変更しない（変更しようとすると止まる）
 
 役割は `.claude/agents/todo.md`、データのルールは `CLAUDE.md` にある。TODO を追加・更新・アーカイブする。「30 をやりたい」のように id で指示できる。
+
+- 象限を言わずに足した TODO は、確認なしで Inbox（未分類）の末尾に入る。象限や期限を添えれば、その場所に入る
+- 「Inbox を分類して」と頼むと、項目ごとの象限・位置・start/due の案がまとめて出る。まとめて OK するか、直したい項目だけ伝える
 
 新しい TODO の id は `scripts/todo-next-id` が払い出す（エージェントが TODO を足すときに使う）。
 
