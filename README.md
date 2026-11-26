@@ -21,7 +21,8 @@ todo/
 ├── data/                  # 実データ。このリポジトリでは管理しない（手元専用の別 git リポジトリ）
 │   ├── active.md          # 未完了の TODO（4 象限のテーブル）
 │   ├── archive.md         # 完了した TODO
-│   └── notes/             # TODO ごとの詳細メモ（NN-slug.md）
+│   ├── notes/             # TODO ごとの詳細メモ（NN-slug.md）
+│   └── CLAUDE.md          # この data/ だけの運用（任意）
 ├── data.template/         # data/ の空の雛形（install.sh が data/ を作るときに使う）
 ├── demo/                  # 表示確認用のダミーデータ（scripts/todo-view demo/active.md）
 └── LICENSE                # MIT
@@ -96,6 +97,7 @@ contrib/herdr/todo-herdr
 ```
 
 - [herdr](https://herdr.dev) に `todo` ワークスペースを作り、左上に `todo-view`、左下に `claude --agent todo`、右に `todo-notes` を並べる
+- `data/CLAUDE.md` があれば、エージェントの起動時にシステムプロンプトへ足す
 - ワークスペースが既にあれば、`todo-view`・`todo-notes` が止まっているペインだけで起動し直す（herdr の再起動ではビューアが戻らないため）
 - herdr 上でこのリポジトリの Claude を起動・再開すると、`.claude/settings.json` の SessionStart フックがこのスクリプトを呼ぶ。herdr の再起動で Claude が戻れば、ビューアも戻る
 - ペインの配置は作者の好みの例。合わなければスクリプトを書き換えて使う
