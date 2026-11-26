@@ -96,9 +96,4 @@ claude --agent todo   # リポジトリのディレクトリで起動する
 contrib/herdr/todo-herdr
 ```
 
-- [herdr](https://herdr.dev) に `todo` ワークスペースを作り、左上に `todo-view`、左下に `claude --agent todo`、右に `todo-notes` を並べる
-- `data/CLAUDE.md` があれば、エージェントの起動時にシステムプロンプトへ足す
-- ワークスペースが既にあれば、`todo-view`・`todo-notes` が止まっているペインだけで起動し直す（herdr の再起動ではビューアが戻らないため）
-- herdr 上でこのリポジトリの Claude を起動・再開すると、`.claude/settings.json` の SessionStart フックがこのスクリプトを呼ぶ。herdr の再起動で Claude が戻れば、ビューアも戻る
-- ペインの配置は作者の好みの例。合わなければスクリプトを書き換えて使う
-- herdr と jq が必要
+[herdr](https://herdr.dev) に `todo` ワークスペースを作り、ビューアとエージェントを並べる。herdr と jq が必要。
