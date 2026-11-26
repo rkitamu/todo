@@ -1,6 +1,7 @@
 ---
 name: todo
 description: data/ 配下の Markdown で TODO を管理する専用エージェント。`claude --agent todo` で起動する。
+model: sonnet
 hooks:
   PreToolUse:
     - matcher: "Edit|Write|MultiEdit|NotebookEdit|Bash"
